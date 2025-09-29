@@ -7,6 +7,8 @@
 	let loading = true;
 	let error = null;
 	let lastUpdated = null;
+	let selectedGame = null;
+	let showModal = false;
 	
 	// Filter states
 	let showFilters = false;
@@ -394,24 +396,50 @@
 	}
 	
 	// Helper functions
+	// Keep cards minimal height: disable equalization
 	async function equalizeCardHeights() {
 		await tick();
-		/** @type {HTMLElement | null} */
-		const grid = document.querySelector('.games-grid');
+	if (!browser) return;
+	/** @type {HTMLElement | null} */
+	const grid = document.querySelector('.games-grid');
 		if (!grid) return;
+		grid.style.removeProperty('--card-equal-height');
 		/** @type {NodeListOf<HTMLElement>} */
 		const cards = grid.querySelectorAll('.game-card');
-		if (!cards || cards.length === 0) return;
-		// Reset to natural height before measuring
-		cards.forEach(card => (card.style.minHeight = 'auto'));
-		let maxHeight = 0;
-		cards.forEach(card => {
-			const h = card.offsetHeight;
-			if (h > maxHeight) maxHeight = h;
-		});
-		// Apply as CSS variable so all cards share the height
-		grid.style.setProperty('--card-equal-height', `${maxHeight}px`);
-		cards.forEach(card => (card.style.minHeight = 'var(--card-equal-height)'));
+		cards.forEach(card => (card.style.minHeight = '')); // natural
+	}
+
+	function openGameModal(game) {
+		selectedGame = game;
+		showModal = true;
+	}
+
+	function closeGameModal() {
+		showModal = false;
+		selectedGame = null;
+	}
+
+	function onCardKeydown(event, game) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			openGameModal(game);
+		}
+	}
+
+	function formatStatusOrTime(game) {
+		if (game.statusType === 'STATUS_IN_PROGRESS') {
+			const q = game.gameDetails?.quarter ? `Q${game.gameDetails.quarter}` : '';
+			const clk = game.gameDetails?.clock || '';
+			return [q, clk].filter(Boolean).join(' ');
+		}
+		if (game.statusType === 'STATUS_FINAL') return 'Final';
+		return formatGameTime(game.date);
+	}
+
+	function formatCompactMeta(game) {
+		const when = formatStatusOrTime(game);
+		const net = game.network || 'TBD';
+		return `${net} • ${when}`;
 	}
 	/**
 	 * Compute the current CFB week range in local time.
@@ -844,95 +872,26 @@
 	{:else}
 		<div class="games-grid">
 			{#each filteredGames as game (game.id)}
-				<div class="game-card" class:live={game.statusType === 'STATUS_IN_PROGRESS'}>
-					<div class="game-header">
-					<div class="game-title">
-						<span class="network">{game.network}</span>
-					</div>
-						<div class="game-status" style="color: {getStatusColor(game.statusType)}">
-							{game.status}
-						</div>
-					</div>
-
-					<div class="teams">
-					<div class="team away-team">
-						<div class="team-brand">
-							<img src={game.awayTeam.logo} alt={game.awayTeam.name} class="team-logo" />
-							<div class="team-info">
-							<span class="team-name">{game.awayTeam.name}</span>
-							<span class="team-record">{game.awayTeam.record}</span>
+				<div class="game-card" class:live={game.statusType === 'STATUS_IN_PROGRESS'} role="button" tabindex="0" on:click={() => openGameModal(game)} on:keydown={(e) => onCardKeydown(e, game)}>
+					<div class="game-compact">
+						<img src={game.awayTeam.logo} alt={game.awayTeam.name} class="team-logo small" />
+						<span class="abbr">
 							{#if game.awayTeam.ranked}
-								<div class="team-rank"><span class="ranking-badge">#{game.awayTeam.ranked}</span></div>
+								<span class="rank-mini">#{game.awayTeam.ranked}</span>
 							{/if}
-							</div>
-						</div>
-						<div class="team-score">{game.awayTeam.score}</div>
-					</div>
-
-						<div class="vs">@</div>
-
-					<div class="team home-team">
-						<div class="team-brand">
-							<img src={game.homeTeam.logo} alt={game.homeTeam.name} class="team-logo" />
-							<div class="team-info">
-							<span class="team-name">{game.homeTeam.name}</span>
-							<span class="team-record">{game.homeTeam.record}</span>
+							{game.awayTeam.abbreviation || game.awayTeam.name}
+						</span>
+						<span class="team-score compact">{game.awayTeam.score ?? '-'}</span>
+						<span class="vs">@</span>
+						<span class="team-score compact">{game.homeTeam.score ?? '-'}</span>
+						<span class="abbr">
 							{#if game.homeTeam.ranked}
-								<div class="team-rank"><span class="ranking-badge">#{game.homeTeam.ranked}</span></div>
+								<span class="rank-mini">#{game.homeTeam.ranked}</span>
 							{/if}
-							</div>
-						</div>
-						<div class="team-score">{game.homeTeam.score}</div>
-					</div>
-					</div>
-
-					{#if game.statusType === 'STATUS_IN_PROGRESS'}
-						<div class="game-details">
-							<div class="game-clock">
-								<span class="quarter">Q{game.gameDetails.quarter}</span>
-								<span class="time">{game.gameDetails.clock}</span>
-							</div>
-							
-							{#if game.gameDetails.possession}
-								<div class="possession">
-									<span class="label">Possession:</span>
-									<span class="team-name">{game.gameDetails.possession}</span>
-								</div>
-							{/if}
-							
-							{#if game.gameDetails.yardLine}
-								<div class="yard-line">
-									<span class="label">Yard Line:</span>
-									<span class="yard">{game.gameDetails.yardLine}</span>
-								</div>
-							{/if}
-							
-							{#if game.gameDetails.down}
-								<div class="down-distance">
-									<span class="down">{game.gameDetails.down}</span>
-									{#if game.gameDetails.distance}
-										<span class="distance">& {game.gameDetails.distance}</span>
-									{/if}
-								</div>
-							{/if}
-							
-							{#if game.gameDetails.redZone}
-								<div class="red-zone">🔴 Red Zone</div>
-							{/if}
-						</div>
-					{/if}
-
-					<div class="card-footer">
-						{#if game.gameDetails.temperature || game.gameDetails.weather}
-							<div class="weather">
-								🌤️ {formatTemperature(game.gameDetails)}
-							</div>
-						{/if}
-						{#if game.statusType === 'STATUS_SCHEDULED'}
-							<div class="game-time">
-								⏰ {formatGameTime(game.date)}
-							</div>
-						{/if}
+							{game.homeTeam.abbreviation || game.homeTeam.name}
+						</span>
+						<img src={game.homeTeam.logo} alt={game.homeTeam.name} class="team-logo small" />
+						<span class="meta">{formatCompactMeta(game)}</span>
 					</div>
 				</div>
 			{/each}
@@ -1014,24 +973,76 @@
 
 	.games-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-		gap: 20px;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 10px;
 	}
 
 	.game-card {
 		background: white;
-		border-radius: 12px;
-		padding: 20px;
-		box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-		transition: all 0.3s ease;
-		border: 2px solid transparent;
+		border-radius: 6px;
+		padding: 6px 8px;
+		box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+		transition: background 0.15s ease, transform 0.1s ease;
+		border: 1px solid #e5e7eb;
+		min-height: 44px;
 		display: flex;
-		flex-direction: column;
+		align-items: center;
+		cursor: pointer;
+		user-select: none;
 	}
 
 	.game-card:hover {
-		transform: translateY(-4px);
-		box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+		background: #f9fafb;
+	}
+	.game-compact {
+		display: grid;
+		grid-template-columns: 20px auto auto auto auto auto 20px minmax(110px, 1fr);
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+	}
+
+	.team-logo.small {
+		width: 20px;
+		height: 20px;
+		object-fit: contain;
+	}
+
+	.abbr {
+		font-weight: 600;
+		font-size: 0.82rem;
+		color: #111827;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.rank-mini {
+		background: #f59e0b;
+		color: white;
+		font-size: 0.64rem;
+		font-weight: 700;
+		padding: 1px 4px;
+		border-radius: 8px;
+	}
+
+	.team-score.compact {
+		font-size: 0.95rem;
+		font-weight: 700;
+		text-align: center;
+		min-width: 16px;
+	}
+
+	.meta {
+		text-align: right;
+		font-size: 0.78rem;
+		color: #6b7280;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.game-card.live {
@@ -1458,10 +1469,16 @@
 	}
 
 	/* Responsive design for filters */
+	@media (max-width: 1280px) {
+		.games-grid { grid-template-columns: repeat(4, 1fr); }
+	}
+
+	@media (max-width: 900px) {
+		.games-grid { grid-template-columns: repeat(2, 1fr); }
+	}
+
 	@media (max-width: 768px) {
-		.games-grid {
-			grid-template-columns: 1fr;
-		}
+		.games-grid { grid-template-columns: 1fr; }
 		
 		.header h1 {
 			font-size: 2rem;
@@ -1492,4 +1509,150 @@
 			flex-direction: column;
 		}
 	}
+
+/* Simple modal */
+.modal-backdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background: rgba(0,0,0,0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+}
+
+.modal {
+	background: #fff;
+	border-radius: 12px;
+	width: min(900px, 95vw);
+	max-height: 85vh;
+	overflow: auto;
+	box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+	border: 1px solid #e5e7eb;
+}
+
+.modal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 16px;
+	border-bottom: 1px solid #f3f4f6;
+}
+
+.modal-body { padding: 16px; }
+
+.close-btn {
+	background: transparent;
+	border: none;
+	font-size: 1.25rem;
+	cursor: pointer;
+}
+
+.modal-card {
+	background: white;
+	border-radius: 12px;
+	padding: 16px;
+	border: 1px solid #e5e7eb;
+	box-shadow: 0 4px 8px rgba(0,0,0,0.06);
+}
+
+.modal-row {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 16px;
+}
+
+.modal-team {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.modal-team.away { justify-content: flex-start; }
+.modal-team.home { justify-content: flex-end; flex-direction: row-reverse; }
+
+.modal-team-info { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.modal-team-info .name { font-weight: 700; color: #1f2937; }
+.modal-team-info .record { font-size: 0.85rem; color: #6b7280; }
+.modal-team-info .rank { margin-top: 4px; }
+
+.modal-score { text-align: center; min-width: 220px; }
+.modal-score .status { font-weight: 700; margin-bottom: 6px; }
+.modal-score .scores { display: flex; align-items: center; gap: 10px; justify-content: center; font-size: 1.25rem; font-weight: 800; }
+.modal-score .submeta { margin-top: 6px; color: #6b7280; font-size: 0.9rem; display: flex; gap: 6px; justify-content: center; align-items: center; }
+
+.modal-network { font-weight: 700; color: #374151; }
+
+.live-extras { margin-top: 16px; display: grid; gap: 6px; }
 </style>
+
+{#if showModal && selectedGame}
+	<div class="modal-backdrop" on:click={closeGameModal}>
+		<div class="modal" on:click|stopPropagation>
+			<div class="modal-header">
+				<div class="modal-network">{selectedGame.network}</div>
+				<button class="close-btn" aria-label="Close" on:click={closeGameModal}>✕</button>
+			</div>
+			<div class="modal-body">
+				<div class="modal-card">
+					<div class="modal-row">
+						<div class="modal-team away">
+							<img src={selectedGame.awayTeam.logo} alt={selectedGame.awayTeam.name} class="team-logo" />
+							<div class="modal-team-info">
+								<div class="name">{selectedGame.awayTeam.name}</div>
+								<div class="record">{selectedGame.awayTeam.record}</div>
+								{#if selectedGame.awayTeam.ranked}
+									<div class="rank"><span class="ranking-badge">#{selectedGame.awayTeam.ranked}</span></div>
+								{/if}
+							</div>
+						</div>
+						<div class="modal-score">
+							<div class="status" style="color: {getStatusColor(selectedGame.statusType)}">{selectedGame.status}</div>
+							<div class="scores">
+								<span class="away-score">{selectedGame.awayTeam.score}</span>
+								<span class="at">@</span>
+								<span class="home-score">{selectedGame.homeTeam.score}</span>
+							</div>
+							<div class="submeta">
+								<span>{formatGameTime(selectedGame.date)}</span>
+								<span>•</span>
+								<span>{formatTemperature(selectedGame.gameDetails)}</span>
+							</div>
+						</div>
+						<div class="modal-team home">
+							<img src={selectedGame.homeTeam.logo} alt={selectedGame.homeTeam.name} class="team-logo" />
+							<div class="modal-team-info">
+								<div class="name">{selectedGame.homeTeam.name}</div>
+								<div class="record">{selectedGame.homeTeam.record}</div>
+								{#if selectedGame.homeTeam.ranked}
+									<div class="rank"><span class="ranking-badge">#{selectedGame.homeTeam.ranked}</span></div>
+								{/if}
+							</div>
+						</div>
+					</div>
+
+					{#if selectedGame.statusType === 'STATUS_IN_PROGRESS'}
+						<div class="live-extras">
+							{#if selectedGame.gameDetails.possession}
+								<div><strong>Possession:</strong> {selectedGame.gameDetails.possession}</div>
+							{/if}
+							{#if selectedGame.gameDetails.yardLine}
+								<div><strong>Yard Line:</strong> {selectedGame.gameDetails.yardLine}</div>
+							{/if}
+							{#if selectedGame.gameDetails.down}
+								<div><strong>Down & Distance:</strong> {selectedGame.gameDetails.down}{#if selectedGame.gameDetails.distance} & {selectedGame.gameDetails.distance}{/if}</div>
+							{/if}
+							{#if selectedGame.gameDetails.redZone}
+								<div class="red-zone">🔴 Red Zone</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
