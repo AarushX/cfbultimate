@@ -846,45 +846,44 @@
 			{#each filteredGames as game (game.id)}
 				<div class="game-card" class:live={game.statusType === 'STATUS_IN_PROGRESS'}>
 					<div class="game-header">
-						<div class="game-title">
-							<h3>{game.name}</h3>
-							<span class="network">{game.network}</span>
-						</div>
+					<div class="game-title">
+						<span class="network">{game.network}</span>
+					</div>
 						<div class="game-status" style="color: {getStatusColor(game.statusType)}">
 							{game.status}
 						</div>
 					</div>
 
 					<div class="teams">
-						<div class="team away-team">
+					<div class="team away-team">
+						<div class="team-brand">
 							<img src={game.awayTeam.logo} alt={game.awayTeam.name} class="team-logo" />
 							<div class="team-info">
-								<span class="team-name">
-									{#if game.awayTeam.ranked}
-										<span class="ranking-badge">#{game.awayTeam.ranked}</span>
-									{/if}
-									{game.awayTeam.name}
-								</span>
-								<span class="team-record">{game.awayTeam.record}</span>
+							<span class="team-name">{game.awayTeam.name}</span>
+							<span class="team-record">{game.awayTeam.record}</span>
+							{#if game.awayTeam.ranked}
+								<div class="team-rank"><span class="ranking-badge">#{game.awayTeam.ranked}</span></div>
+							{/if}
 							</div>
-							<div class="team-score">{game.awayTeam.score}</div>
 						</div>
+						<div class="team-score">{game.awayTeam.score}</div>
+					</div>
 
 						<div class="vs">@</div>
 
-						<div class="team home-team">
+					<div class="team home-team">
+						<div class="team-brand">
 							<img src={game.homeTeam.logo} alt={game.homeTeam.name} class="team-logo" />
 							<div class="team-info">
-								<span class="team-name">
-									{#if game.homeTeam.ranked}
-										<span class="ranking-badge">#{game.homeTeam.ranked}</span>
-									{/if}
-									{game.homeTeam.name}
-								</span>
-								<span class="team-record">{game.homeTeam.record}</span>
+							<span class="team-name">{game.homeTeam.name}</span>
+							<span class="team-record">{game.homeTeam.record}</span>
+							{#if game.homeTeam.ranked}
+								<div class="team-rank"><span class="ranking-badge">#{game.homeTeam.ranked}</span></div>
+							{/if}
 							</div>
-							<div class="team-score">{game.homeTeam.score}</div>
 						</div>
+						<div class="team-score">{game.homeTeam.score}</div>
+					</div>
 					</div>
 
 					{#if game.statusType === 'STATUS_IN_PROGRESS'}
@@ -921,17 +920,20 @@
 								<div class="red-zone">🔴 Red Zone</div>
 							{/if}
 						</div>
-					{:else if game.statusType === 'STATUS_SCHEDULED'}
-						<div class="game-time">
-							⏰ {formatGameTime(game.date)}
-						</div>
 					{/if}
 
-					{#if game.gameDetails.temperature || game.gameDetails.weather}
-						<div class="weather">
-							🌤️ {formatTemperature(game.gameDetails)}
-						</div>
-					{/if}
+					<div class="card-footer">
+						{#if game.gameDetails.temperature || game.gameDetails.weather}
+							<div class="weather">
+								🌤️ {formatTemperature(game.gameDetails)}
+							</div>
+						{/if}
+						{#if game.statusType === 'STATUS_SCHEDULED'}
+							<div class="game-time">
+								⏰ {formatGameTime(game.date)}
+							</div>
+						{/if}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -1023,6 +1025,8 @@
 		box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 		transition: all 0.3s ease;
 		border: 2px solid transparent;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.game-card:hover {
@@ -1042,11 +1046,7 @@
 		margin-bottom: 15px;
 	}
 
-	.game-title h3 {
-		margin: 0 0 5px 0;
-		font-size: 1.1rem;
-		color: #1f2937;
-	}
+
 
 	.network {
 		font-size: 0.85rem;
@@ -1085,14 +1085,23 @@
 	}
 
 	.team-logo {
-		width: 40px;
-		height: 40px;
+		width: 48px;
+		height: 48px;
 		object-fit: contain;
 	}
 
 	.team-info {
 		display: flex;
 		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+
+	.team-brand {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
 		flex: 1;
 	}
 
@@ -1102,7 +1111,11 @@
 		color: #1f2937;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 6px;
+	}
+	.team-rank {
+		margin-top: 2px;
 	}
 	
 	.ranking-badge {
@@ -1202,7 +1215,14 @@
 		text-align: center;
 		font-size: 0.9rem;
 		color: #6b7280;
-		margin-top: 8px;
+		margin-top: 0;
+	}
+
+	.card-footer {
+		margin-top: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 
 	.loading, .error, .no-games {
