@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
 
 	let games = [];
@@ -34,15 +34,12 @@
 			loading = true;
 			error = null;
 			
-			// Get current week's games only
-			const today = new Date();
-			const startOfWeek = new Date(today);
-			startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
-			const endOfWeek = new Date(startOfWeek);
-			endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
+			// Get current week's games with Sunday early-morning grace period
+			const { start: startOfWeek, end: endOfWeek } = getCurrentWeekRange(6);
 			
-			const startDateStr = startOfWeek.toISOString().split('T')[0].replace(/-/g, '');
-			const endDateStr = endOfWeek.toISOString().split('T')[0].replace(/-/g, '');
+			// Use local date formatting to avoid UTC shifting
+			const startDateStr = formatDateAsYYYYMMDDLocal(startOfWeek);
+			const endDateStr = formatDateAsYYYYMMDDLocal(endOfWeek);
 			
 			console.log('Fetching games for week:', startDateStr, 'to', endDateStr);
 			
@@ -91,16 +88,10 @@
 			
 			console.log('Unique games after deduplication:', uniqueGames.length);
 			
-			// Filter out old games and only keep current week
+			// Filter out old games and only keep current week (with grace)
 			const currentWeekGames = uniqueGames.filter(event => {
 				const gameDate = new Date(event.date);
-				const today = new Date();
-				const startOfWeek = new Date(today);
-				startOfWeek.setDate(today.getDate() - today.getDay());
-				const endOfWeek = new Date(startOfWeek);
-				endOfWeek.setDate(startOfWeek.getDate() + 6);
-				
-				// Only include games from this week
+				const { start: startOfWeek, end: endOfWeek } = getCurrentWeekRange(6);
 				return gameDate >= startOfWeek && gameDate <= endOfWeek;
 			});
 			
@@ -403,6 +394,64 @@
 	}
 	
 	// Helper functions
+	async function equalizeCardHeights() {
+		await tick();
+		/** @type {HTMLElement | null} */
+		const grid = document.querySelector('.games-grid');
+		if (!grid) return;
+		/** @type {NodeListOf<HTMLElement>} */
+		const cards = grid.querySelectorAll('.game-card');
+		if (!cards || cards.length === 0) return;
+		// Reset to natural height before measuring
+		cards.forEach(card => (card.style.minHeight = 'auto'));
+		let maxHeight = 0;
+		cards.forEach(card => {
+			const h = card.offsetHeight;
+			if (h > maxHeight) maxHeight = h;
+		});
+		// Apply as CSS variable so all cards share the height
+		grid.style.setProperty('--card-equal-height', `${maxHeight}px`);
+		cards.forEach(card => (card.style.minHeight = 'var(--card-equal-height)'));
+	}
+	/**
+	 * Compute the current CFB week range in local time.
+	 * Treat early Sunday (before graceHours) as part of the previous week.
+	 * @param {number} graceHours
+	 * @returns {{ start: Date, end: Date }}
+	 */
+	function getCurrentWeekRange(graceHours = 6) {
+		const now = new Date();
+		// If it's early Sunday morning (before grace), still treat as previous week
+		const reference = new Date(now);
+		if (reference.getDay() === 0 && reference.getHours() < graceHours) {
+			reference.setDate(reference.getDate() - 1); // use Saturday as reference
+		}
+
+		// Start of week: Sunday 00:00 local
+		const start = new Date(reference);
+		start.setHours(0, 0, 0, 0);
+		start.setDate(start.getDate() - start.getDay());
+
+		// End of week with grace: next Sunday at graceHours:00 local
+		const end = new Date(start);
+		end.setDate(end.getDate() + 7); // move to next Sunday
+		end.setHours(graceHours, 0, 0, 0);
+
+		return { start, end };
+	}
+
+	/**
+	 * Format a Date as YYYYMMDD using local time (avoids UTC date-shift).
+	 * @param {Date} date
+	 * @returns {string}
+	 */
+	function formatDateAsYYYYMMDDLocal(date) {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}${month}${day}`;
+	}
+
 	function parseRecord(recordStr) {
 		if (!recordStr || typeof recordStr !== 'string') return { wins: 0, losses: 0 };
 		const parts = recordStr.split('-');
@@ -496,12 +545,24 @@
 			fetchGames();
 		}, 30000);
 		
+		const handleResize = () => equalizeCardHeights();
+		window.addEventListener('resize', handleResize);
+		window.addEventListener('orientationchange', handleResize);
+		
 		return () => {
 			if (refreshInterval) {
 				clearInterval(refreshInterval);
 			}
+			window.removeEventListener('resize', handleResize);
+			window.removeEventListener('orientationchange', handleResize);
 		};
 	});
+
+	// Recompute equal heights whenever the visible cards change
+	$: {
+		filteredGames;
+		equalizeCardHeights();
+	}
 
 	// Function to get game status color
 	function getStatusColor(statusType) {
@@ -529,12 +590,12 @@
 	
 	// Function to format temperature
 	function formatTemperature(gameDetails) {
-		if (!gameDetails.temperature) return gameDetails.weather || '';
+		const weatherText = gameDetails.weather || '';
+		// If temperature is null/undefined, just show the weather text
+		if (gameDetails.temperature == null) return weatherText;
 		
 		const fahrenheit = gameDetails.temperature;
-		const condition = gameDetails.condition || '';
-		
-		return `${fahrenheit}°F${condition ? ` - ${condition}` : ''}`;
+		return `${fahrenheit}°F${weatherText ? ` - ${weatherText}` : ''}`;
 	}
 </script>
 
